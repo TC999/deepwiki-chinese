@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepWiki 汉化插件
-// @namespace    https://github.com/TC999/deepwiki-chinese
-// @version      1.0
+// @namespace    http://tampermonkey.net/
+// @version      1.5
 // @description  DeepWiki 汉化插件，DeepWiki 中文化界面
 // @author       陈生杂物房
 // @match        *://deepwiki.org/*
@@ -20,6 +20,7 @@
         "powered by": "驱动",
         "Share": "分享",
         "Link copied!": "链接已复制",
+        "Copied to clipboard": "已复制到剪切板",
         // 中间
         "Which repo would you like to understand?": "您想了解什么仓库？",
         "What is DeepWiki?": "什么是 DeepWiki？",
@@ -27,12 +28,12 @@
         "Search for repositories (or paste a link)": "搜索仓库（或粘贴链接）",
 
         "Add repo": "添加仓库",
-            "Add Repository": "添加仓库",
-            "Public Repository": "公共仓库",
-            "Search for a GitHub repository": "搜索 GitHub 仓库",
-            "Enter the URL of a public GitHub repository": "键入 GitHub 公共仓库链接",
-            "Private Repository": "私有仓库",
-            "Set up my private repo on Devin": "在 Devin 上设置我的私有仓库",
+        "Add Repository": "添加仓库",
+        "Public Repository": "公共仓库",
+        "Search for a GitHub repository": "搜索 GitHub 仓库",
+        "Enter the URL of a public GitHub repository": "键入 GitHub 公共仓库链接",
+        "Private Repository": "私有仓库",
+        "Set up my private repo on Devin": "在 Devin 上设置我的私有仓库",
         // 未导入仓库
         "stars": "星标",
         "Updated:": "更新于：",
@@ -44,8 +45,8 @@
         // 某仓库 wiki
         "Last indexed:": "最后索引：",
         "Auto-refresh not enabled yet": "自动刷新尚未启用",
-            "Add a badge to this wiki in the repo's README file to auto refresh the wiki weekly with the latest code.": "在仓库的 README 文件中为此 Wiki 页面添加徽章，以实现每周自动使用最新代码更新 Wiki 内容。",
-            "Create badge": "创建徽章",
+        "Add a badge to this wiki in the repo's README file to auto refresh the wiki weekly with the latest code.": "在仓库的 README 文件中为此 Wiki 页面添加徽章，以实现每周自动使用最新代码更新 Wiki 内容。",
+        "Create badge": "创建徽章",
         "Try DeepWiki on your private codebase with": "在您的私有代码库上试用 DeepWiki，使用",
 
         "Relevant source files": "相关源文件",
@@ -55,7 +56,34 @@
         "Deep Research": "深度思考",
 
         // gpt 问答页
+        "Fast": "快速",
+        "Go deeper": "深度思考",
+        "Deep": "深度",
+        "Thinking...": "思考中...",
     };
+
+    // 定义正则替换规则
+    // 格式为数组，每个元素是 [正则表达式, 替换值]
+    const regexReplacements = [
+        [/Search(?:ed|ing) across (\S+)/i, "搜索自 $1"],
+        [/Ask Devin about (\S+)/i, "询问 Devin 关于 $1"],
+        // 日期
+        [/(\d{1,2}) (January|Feburay|March|April|May|June|July|August|September|October|November|December) (\d{4})/, function(all, d, m ,y) {
+            var mKey = {"January": "1月",
+                        "February": "2月",
+                        "March": "3月",
+                        "April": "4月",
+                        "May": "5月",
+                        "June": "6月",
+                        "July": "7月",
+                        "August": "8月",
+                        "September": "9月",
+                        "October": "10月",
+                        "November": "11月",
+                        "December": "12月"};
+            return y + mKey[m] + d + '日';
+        }],
+    ];
 
     // 定义一个已处理标记，避免重复处理节点
     const processedFlag = 'data-text-processed';
@@ -67,8 +95,10 @@
             if (!node.parentElement || node.parentElement.getAttribute(processedFlag)) return;
 
             let textContent = node.textContent;
-            let replaced = false; // 标记是否有替换发生
+            let replaced = false; // 标记是否有普通替换发生
+            let replacedRegex = false; // 标记是否有正则替换发生
 
+            // 执行普通替换
             for (let key in replacements) {
                 if (replacements.hasOwnProperty(key) && textContent.includes(key)) {
                     textContent = textContent.split(key).join(replacements[key]);
@@ -76,8 +106,18 @@
                 }
             }
 
+            // 执行正则替换
+            for (let [regex, replacement] of regexReplacements) {
+                if (regex.test(textContent)) {
+                    textContent = textContent.replace(regex, replacement);
+                    replacedRegex = true;
+                }
+            }
+
             // 仅在发生替换的情况下更新内容
-            if (replaced) {
+            if (replaced || replacedRegex) {
+                console.log("Before:", node.textContent);
+                console.log("After:", textContent);
                 node.textContent = textContent;
                 node.parentElement.setAttribute(processedFlag, "true");
             }
