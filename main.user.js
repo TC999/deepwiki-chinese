@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         DeepWiki 汉化插件
-// @namespace    http://tampermonkey.net/
-// @version      1.5
-// @description  DeepWiki 汉化插件，DeepWiki 中文化界面
+// @namespace    https://github.com/TC999/deepwiki-chinese
+// @version      1.0
+// @description  DeepWiki 汉化插件，DeepWiki 中文化界面，增加翻译项前后空格检查和完全匹配功能
 // @author       陈生杂物房
 // @match        *://deepwiki.org/*
 // @match        *://deepwiki.com/*
@@ -42,6 +42,11 @@
         "Indexing typically takes 2-10 minutes to complete after it starts indexing": "索引通常在开始后需要 2 到 10 分钟完成。",
         "Index Repository": "索引仓库",
         "Once indexed, you'll have full access to code exploration and search functionality": "建立索引后，您即可全面使用代码探索和搜索功能。",
+
+        "Indexing in Progress": "索引中",
+        "The indexing process typically takes 2-10 minutes to complete": "索引编制过程通常需要 2-10 分钟完成",
+        "We'll notify you at": "我们将通知",
+        "once indexing is complete": "当索引完成",
         // 某仓库 wiki
         "Last indexed:": "最后索引：",
         "Auto-refresh not enabled yet": "自动刷新尚未启用",
@@ -63,50 +68,51 @@
     };
 
     // 定义正则替换规则
-    // 格式为数组，每个元素是 [正则表达式, 替换值]
     const regexReplacements = [
         [/Search(?:ed|ing) across (\S+)/i, "搜索自 $1"],
         [/Ask Devin about (\S+)/i, "询问 Devin 关于 $1"],
+        [/Your repository is queued for indexing. You are number (\d+) in the queue./i, "您的仓库正在排队索引。当前队列：$1"],
         // 日期
-        [/(\d{1,2}) (January|Feburay|March|April|May|June|July|August|September|October|November|December) (\d{4})/, function(all, d, m ,y) {
-            var mKey = {"January": "1月",
-                        "February": "2月",
-                        "March": "3月",
-                        "April": "4月",
-                        "May": "5月",
-                        "June": "6月",
-                        "July": "7月",
-                        "August": "8月",
-                        "September": "9月",
-                        "October": "10月",
-                        "November": "11月",
-                        "December": "12月"};
-            return y + mKey[m] + d + '日';
+        [/(\d{1,2}) (January|February|March|April|May|June|July|August|September|October|November|December) (\d{4})/, function(all, d, m ,y) {
+            const months = {
+                "January": "1月", "February": "2月", "March": "3月", "April": "4月",
+                "May": "5月", "June": "6月", "July": "7月", "August": "8月",
+                "September": "9月", "October": "10月", "November": "11月", "December": "12月"
+            };
+            return `${y}年${months[m]}${d}日`;
         }],
     ];
 
-    // 定义一个已处理标记，避免重复处理节点
     const processedFlag = 'data-text-processed';
+
+    // 删除字符串前后空格并完全匹配替换
+    function trimAndReplace(text, key, value) {
+        const trimmedKey = key.trim();
+        if (text === trimmedKey) {
+            return value;
+        }
+        return text;
+    }
 
     // 替换文字函数
     function replaceText(node) {
         if (node.nodeType === Node.TEXT_NODE) {
-            // 检查是否替换过
             if (!node.parentElement || node.parentElement.getAttribute(processedFlag)) return;
 
-            let textContent = node.textContent;
-            let replaced = false; // 标记是否有普通替换发生
-            let replacedRegex = false; // 标记是否有正则替换发生
+            let textContent = node.textContent.trim();
+            let replaced = false;
+            let replacedRegex = false;
 
-            // 执行普通替换
             for (let key in replacements) {
-                if (replacements.hasOwnProperty(key) && textContent.includes(key)) {
-                    textContent = textContent.split(key).join(replacements[key]);
-                    replaced = true;
+                if (replacements.hasOwnProperty(key)) {
+                    const newText = trimAndReplace(textContent, key, replacements[key]);
+                    if (newText !== textContent) {
+                        textContent = newText;
+                        replaced = true;
+                    }
                 }
             }
 
-            // 执行正则替换
             for (let [regex, replacement] of regexReplacements) {
                 if (regex.test(textContent)) {
                     textContent = textContent.replace(regex, replacement);
@@ -114,7 +120,6 @@
                 }
             }
 
-            // 仅在发生替换的情况下更新内容
             if (replaced || replacedRegex) {
                 console.log("Before:", node.textContent);
                 console.log("After:", textContent);
@@ -122,32 +127,23 @@
                 node.parentElement.setAttribute(processedFlag, "true");
             }
         } else if (node.nodeType === Node.ELEMENT_NODE) {
-            // 如果是元素节点，递归处理子节点
             node.childNodes.forEach(replaceText);
         }
     }
 
-    // 处理整个文档的替换
     function processDocument() {
         replaceText(document.body);
     }
 
-    // 修改网页语言为中文
     document.documentElement.lang = "zh";
 
-    // 初始化替换
     processDocument();
 
-    // 监听动态变化
     const observer = new MutationObserver((mutations) => {
         mutations.forEach((mutation) => {
             if (mutation.type === 'childList') {
                 mutation.addedNodes.forEach((node) => {
-                    if (node.nodeType === Node.ELEMENT_NODE) {
-                        replaceText(node);
-                    } else if (node.nodeType === Node.TEXT_NODE) {
-                        replaceText(node);
-                    }
+                    replaceText(node);
                 });
             } else if (mutation.type === 'characterData') {
                 replaceText(mutation.target);
@@ -155,10 +151,9 @@
         });
     });
 
-    // 开始监听，仅监听 body 节点
     observer.observe(document.body, {
-        childList: true, // 监听子节点的增加或删除
-        characterData: true, // 监听节点内容或文本的变化
-        subtree: true // 递归监听子树中的所有节点
+        childList: true,
+        characterData: true,
+        subtree: true
     });
 })();
